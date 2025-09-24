@@ -1,6 +1,9 @@
 import requests
 import json
 import logging
+import time
+import random
+import os
 from typing import List, Dict, Optional
 from config import BILIBILI_UP_UID, BILIBILI_API_BASE, HEADERS
 
@@ -13,10 +16,66 @@ class BilibiliMonitor:
         self.up_uid = up_uid
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
+        self.last_request_time = 0
+        self.min_request_interval = 3  # 最小请求间隔3秒
+        self.cache_file = 'data/video_cache.json'
+        self.cache_duration = 300  # 缓存5分钟
+        
+    def _ensure_data_dir(self):
+        """确保data目录存在"""
+        os.makedirs('data', exist_ok=True)
+    
+    def _wait_for_rate_limit(self):
+        """等待请求间隔以避免频率限制"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            wait_time = self.min_request_interval - time_since_last + random.uniform(0.5, 1.5)
+            logger.debug(f"Rate limiting: waiting {wait_time:.2f} seconds")
+            time.sleep(wait_time)
+        self.last_request_time = time.time()
+    
+    def _load_cache(self) -> Optional[List[Dict]]:
+        """加载缓存的视频数据"""
+        try:
+            if not os.path.exists(self.cache_file):
+                return None
+            
+            # 检查缓存是否过期
+            cache_age = time.time() - os.path.getmtime(self.cache_file)
+            if cache_age > self.cache_duration:
+                logger.debug("Cache expired")
+                return None
+                
+            with open(self.cache_file, 'r', encoding='utf-8') as f:
+                cached_data = json.load(f)
+                logger.info(f"Loaded {len(cached_data)} videos from cache")
+                return cached_data
+        except Exception as e:
+            logger.warning(f"Failed to load cache: {e}")
+            return None
+    
+    def _save_cache(self, videos: List[Dict]):
+        """保存视频数据到缓存"""
+        try:
+            self._ensure_data_dir()
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(videos, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Cached {len(videos)} videos")
+        except Exception as e:
+            logger.warning(f"Failed to save cache: {e}")
     
     def get_latest_videos(self, page_size: int = 10) -> List[Dict]:
         """获取UP主最新的视频列表"""
+        # 首先尝试从缓存加载
+        cached_videos = self._load_cache()
+        if cached_videos:
+            return cached_videos[:page_size]
+        
         try:
+            # 等待避免频率限制
+            self._wait_for_rate_limit()
+            
             # 使用官方API规范中的接口
             url = f"{BILIBILI_API_BASE}/x/space/wbi/arc/search"
             params = {
@@ -53,8 +112,12 @@ class BilibiliMonitor:
                 logger.warning("Unexpected API response structure")
                 return self._try_alternative_api(page_size)
             
+            formatted_videos = self._format_videos(videos)
+            # 保存到缓存
+            self._save_cache(formatted_videos)
+            
             logger.info(f"Successfully fetched {len(videos)} videos from primary API")
-            return self._format_videos(videos)
+            return formatted_videos
             
         except Exception as e:
             logger.warning(f"Error with primary API: {e}")
@@ -63,6 +126,9 @@ class BilibiliMonitor:
     def _try_alternative_api(self, page_size: int) -> List[Dict]:
         """尝试备用API"""
         try:
+            # 等待避免频率限制
+            self._wait_for_rate_limit()
+            
             # 使用简化的用户投稿接口
             url = f"{BILIBILI_API_BASE}/x/space/arc/search"
             params = {
@@ -98,17 +164,35 @@ class BilibiliMonitor:
                 else:
                     videos = []
                 
+                formatted_videos = self._format_videos(videos)
+                # 保存到缓存
+                if formatted_videos:
+                    self._save_cache(formatted_videos)
+                
                 logger.info(f"Alternative API succeeded, got {len(videos)} videos")
-                return self._format_videos(videos)
+                return formatted_videos
             else:
                 logger.error(f"Alternative API failed: {data.get('message', 'Unknown error')}")
-                logger.warning("No backup data available. Returning empty list.")
-                return []
+                return self._fallback_to_cache_or_mock(page_size)
                 
         except Exception as e:
             logger.error(f"Alternative API error: {e}")
-            logger.warning("All API attempts failed. Returning empty list.")
-            return []
+            return self._fallback_to_cache_or_mock(page_size)
+    
+    def _fallback_to_cache_or_mock(self, page_size: int) -> List[Dict]:
+        """回退到缓存或模拟数据"""
+        # 尝试加载过期的缓存
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    cached_data = json.load(f)
+                    logger.info(f"Using expired cache with {len(cached_data)} videos")
+                    return cached_data[:page_size]
+        except Exception as e:
+            logger.warning(f"Failed to load expired cache: {e}")
+        
+        logger.warning("All API attempts failed. Returning empty list.")
+        return []
     
     def get_ai_news_videos(self) -> List[Dict]:
         """获取AI早报相关的视频"""

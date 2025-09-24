@@ -128,6 +128,26 @@ class ContentSummarizer:
             else:
                 clean_text = description
             
+            # 将 ⬛ 替换为换行符
+            clean_text = clean_text.replace('⬛', '\n\n')
+            
+            # 移除所有emoji表情符号（精确范围，避免误删汉字）
+            # 汉字范围: U+4E00-U+9FFF，要避免这个范围
+            emoji_pattern = re.compile(
+                "["
+                "\U0001F600-\U0001F64F"  # emoticons (😀-🙏)
+                "\U0001F300-\U0001F5FF"  # symbols & pictographs (🌀-🗿) 
+                "\U0001F680-\U0001F6FF"  # transport & map symbols (🚀-🛿)
+                "\U0001F1E0-\U0001F1FF"  # flags (🇠-🇿)
+                "\U0001F900-\U0001F9FF"  # supplemental symbols (🤀-🧿)
+                "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended-A
+                "\U00002600-\U000026FF"  # miscellaneous symbols (☀-⛿) 
+                "\U00002700-\U000027BF"  # dingbats (✀-➿)
+                "\U0001F000-\U0001F02F"  # mahjong tiles
+                "\U0001F0A0-\U0001F0FF"  # playing cards
+                "]+", flags=re.UNICODE)
+            clean_text = emoji_pattern.sub('', clean_text)
+            
             # 移除所有链接信息
             # 移除 http/https 链接
             clean_text = re.sub(r'https?://[^\s\n\r\t]+', ' ', clean_text)
