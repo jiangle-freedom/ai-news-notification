@@ -1,0 +1,434 @@
+openapi: 3.0.0
+info:
+  title: Bilibili Video Information API
+  description: 哔哩哔哩视频信息获取API契约
+  version: 1.0.0
+  contact:
+    name: Bilibili Open Platform
+    url: https://open.bilibili.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.bilibili.com
+    description: B站主API服务器
+  - url: https://api.bilibili.com/x
+    description: B站扩展API服务器
+
+paths:
+  /x/web-interface/view:
+    get:
+      summary: 获取视频详细信息
+      description: 根据视频AV号或BV号获取视频的详细信息，包括基本信息、统计数据、UP主信息等
+      operationId: getVideoInfo
+      tags:
+        - Video Information
+      parameters:
+        - name: aid
+          in: query
+          description: 视频AV号（与bvid二选一）
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 123456789
+        - name: bvid
+          in: query
+          description: 视频BV号（与aid二选一）
+          required: false
+          schema:
+            type: string
+            pattern: '^BV[0-9A-Za-z]{10}$'
+          example: "BV1xx411c7mD"
+      responses:
+        '200':
+          description: 成功获取视频信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoInfoResponse'
+              examples:
+                success:
+                  summary: 成功响应示例
+                  value:
+                    code: 0
+                    message: "0"
+                    ttl: 1
+                    data:
+                      bvid: "BV1xx411c7mD"
+                      aid: 123456789
+                      videos: 1
+                      tid: 28
+                      tname: "原创音乐"
+                      copyright: 1
+                      pic: "https://i0.hdslb.com/bfs/archive/xxx.jpg"
+                      title: "示例视频标题"
+                      pubdate: 1627776000
+                      ctime: 1627776000
+                      desc: "视频描述内容"
+                      duration: 240
+                      owner:
+                        mid: 123456
+                        name: "UP主昵称"
+                        face: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+                      stat:
+                        aid: 123456789
+                        view: 1000000
+                        danmaku: 5000
+                        reply: 2000
+                        favorite: 10000
+                        coin: 8000
+                        share: 3000
+                        like: 50000
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_param:
+                  summary: 缺少必要参数
+                  value:
+                    code: -400
+                    message: "请求错误"
+                    ttl: 1
+        '404':
+          description: 视频不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                video_not_found:
+                  summary: 视频不存在
+                  value:
+                    code: -404
+                    message: "视频不存在"
+                    ttl: 1
+        '403':
+          description: 视频访问受限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                access_denied:
+                  summary: 访问受限
+                  value:
+                    code: -403
+                    message: "权限不足"
+                    ttl: 1
+
+  /x/web-interface/archive/stat:
+    get:
+      summary: 获取视频统计信息
+      description: 获取指定视频的统计数据，包括播放量、点赞数、投币数等
+      operationId: getVideoStats
+      tags:
+        - Video Statistics
+      parameters:
+        - name: aid
+          in: query
+          description: 视频AV号（与bvid二选一）
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 123456789
+        - name: bvid
+          in: query
+          description: 视频BV号（与aid二选一）
+          required: false
+          schema:
+            type: string
+            pattern: '^BV[0-9A-Za-z]{10}$'
+          example: "BV1xx411c7mD"
+      responses:
+        '200':
+          description: 成功获取统计信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoStatsResponse'
+              examples:
+                success:
+                  summary: 成功响应示例
+                  value:
+                    code: 0
+                    message: "0"
+                    ttl: 1
+                    data:
+                      aid: 123456789
+                      bvid: "BV1xx411c7mD"
+                      view: 1000000
+                      danmaku: 5000
+                      reply: 2000
+                      favorite: 10000
+                      coin: 8000
+                      share: 3000
+                      like: 50000
+                      now_rank: 0
+                      his_rank: 50
+                      no_reprint: 1
+
+components:
+  schemas:
+    VideoInfoResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 返回值状态码，0表示成功
+          example: 0
+        message:
+          type: string
+          description: 返回值信息
+          example: "0"
+        ttl:
+          type: integer
+          description: TTL
+          example: 1
+        data:
+          $ref: '#/components/schemas/VideoInfo'
+      required:
+        - code
+        - message
+        - ttl
+
+    VideoStatsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 返回值状态码，0表示成功
+          example: 0
+        message:
+          type: string
+          description: 返回值信息
+          example: "0"
+        ttl:
+          type: integer
+          description: TTL
+          example: 1
+        data:
+          $ref: '#/components/schemas/VideoStats'
+      required:
+        - code
+        - message
+        - ttl
+
+    VideoInfo:
+      type: object
+      properties:
+        bvid:
+          type: string
+          description: 视频BV号
+          example: "BV1xx411c7mD"
+        aid:
+          type: integer
+          description: 视频AV号
+          example: 123456789
+        videos:
+          type: integer
+          description: 视频分P总数
+          example: 1
+        tid:
+          type: integer
+          description: 分区ID
+          example: 28
+        tname:
+          type: string
+          description: 子分区名称
+          example: "原创音乐"
+        copyright:
+          type: integer
+          description: 版权标识（1-自制，2-转载）
+          enum: [1, 2]
+          example: 1
+        pic:
+          type: string
+          description: 视频封面图片url
+          example: "https://i0.hdslb.com/bfs/archive/xxx.jpg"
+        title:
+          type: string
+          description: 视频标题
+          example: "示例视频标题"
+        pubdate:
+          type: integer
+          description: 视频发布时间戳
+          example: 1627776000
+        ctime:
+          type: integer
+          description: 视频投稿时间戳
+          example: 1627776000
+        desc:
+          type: string
+          description: 视频简介
+          example: "视频描述内容"
+        duration:
+          type: integer
+          description: 视频总时长（秒）
+          example: 240
+        owner:
+          $ref: '#/components/schemas/VideoOwner'
+        stat:
+          $ref: '#/components/schemas/VideoStats'
+        dynamic:
+          type: string
+          description: 视频动态信息
+          example: "动态信息"
+        cid:
+          type: integer
+          description: 视频CID
+          example: 987654321
+        dimension:
+          $ref: '#/components/schemas/VideoDimension'
+      required:
+        - bvid
+        - aid
+        - title
+        - owner
+        - stat
+
+    VideoOwner:
+      type: object
+      properties:
+        mid:
+          type: integer
+          description: UP主UID
+          example: 123456
+        name:
+          type: string
+          description: UP主昵称
+          example: "UP主昵称"
+        face:
+          type: string
+          description: UP主头像url
+          example: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+      required:
+        - mid
+        - name
+        - face
+
+    VideoStats:
+      type: object
+      properties:
+        aid:
+          type: integer
+          description: 视频AV号
+          example: 123456789
+        bvid:
+          type: string
+          description: 视频BV号
+          example: "BV1xx411c7mD"
+        view:
+          type: integer
+          description: 播放数
+          example: 1000000
+        danmaku:
+          type: integer
+          description: 弹幕数
+          example: 5000
+        reply:
+          type: integer
+          description: 评论数
+          example: 2000
+        favorite:
+          type: integer
+          description: 收藏数
+          example: 10000
+        coin:
+          type: integer
+          description: 投币数
+          example: 8000
+        share:
+          type: integer
+          description: 分享数
+          example: 3000
+        like:
+          type: integer
+          description: 点赞数
+          example: 50000
+        now_rank:
+          type: integer
+          description: 当前排名
+          example: 0
+        his_rank:
+          type: integer
+          description: 历史最高排名
+          example: 50
+        no_reprint:
+          type: integer
+          description: 禁止转载标识
+          enum: [0, 1]
+          example: 1
+      required:
+        - aid
+        - view
+        - danmaku
+        - reply
+        - favorite
+        - coin
+        - share
+        - like
+
+    VideoDimension:
+      type: object
+      properties:
+        width:
+          type: integer
+          description: 视频宽度
+          example: 1920
+        height:
+          type: integer
+          description: 视频高度
+          example: 1080
+        rotate:
+          type: integer
+          description: 旋转角度
+          example: 0
+      required:
+        - width
+        - height
+        - rotate
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误代码
+          example: -400
+        message:
+          type: string
+          description: 错误信息
+          example: "请求错误"
+        ttl:
+          type: integer
+          description: TTL
+          example: 1
+      required:
+        - code
+        - message
+        - ttl
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API密钥认证
+
+tags:
+  - name: Video Information
+    description: 视频信息相关接口
+  - name: Video Statistics
+    description: 视频统计数据相关接口
+
+externalDocs:
+  description: 哔哩哔哩开放平台文档
+  url: https://open.bilibili.com/doc/

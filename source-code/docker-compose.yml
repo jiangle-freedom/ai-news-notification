@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  ai-news-notification:
+    build: .
+    container_name: ai-news-notification
+    restart: unless-stopped
+    environment:
+      - WECHAT_WEBHOOK_URL=${WECHAT_WEBHOOK_URL}
+      - BILIBILI_UP_UID=${BILIBILI_UP_UID:-285286947}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-360}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: python main.py --mode run
+    
+    # 可选：健康检查
+    healthcheck:
+      test: ["CMD", "python", "main.py", "--mode", "status"]
+      interval: 30m
+      timeout: 10s
+      retries: 3
+      start_period: 1m

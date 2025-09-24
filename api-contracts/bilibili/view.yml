@@ -1,0 +1,742 @@
+openapi: 3.0.0
+info:
+  title: Bilibili Single Video Detail API
+  description: 哔哩哔哩查询单一视频稿件详情API契约
+  version: 1.0.0
+  contact:
+    name: Bilibili Open Platform
+    url: https://open.bilibili.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.bilibili.com
+    description: B站主API服务器
+
+paths:
+  /x/web-interface/view:
+    get:
+      summary: 查询单一视频稿件详情
+      description: 根据视频AV号或BV号获取单个视频稿件的详细信息，包括基本信息、统计数据、分P信息、字幕信息、参与人员等
+      operationId: getSingleVideoDetail
+      tags:
+        - Video Detail
+      parameters:
+        - name: aid
+          in: query
+          description: 视频AV号（与bvid二选一）
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 170001
+        - name: bvid
+          in: query
+          description: 视频BV号（与aid二选一）
+          required: false
+          schema:
+            type: string
+            pattern: '^BV[0-9A-Za-z]{10}$'
+          example: "BV1xx411c7mN"
+      responses:
+        '200':
+          description: 成功获取视频详细信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoDetailResponse'
+              examples:
+                success:
+                  summary: 成功响应示例
+                  value:
+                    code: 0
+                    message: "0"
+                    ttl: 1
+                    data:
+                      aid: 170001
+                      bvid: "BV1xx411c7mN"
+                      title: "示例视频标题"
+                      desc: "视频描述内容"
+                      pic: "https://i0.hdslb.com/bfs/archive/xxx.jpg"
+                      pubdate: 1627776000
+                      ctime: 1627776000
+                      duration: 240
+                      owner:
+                        mid: 123456
+                        name: "UP主昵称"
+                        face: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+                      stat:
+                        view: 1000000
+                        danmaku: 5000
+                        reply: 2000
+                        favorite: 10000
+                        coin: 8000
+                        share: 3000
+                        like: 50000
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_param:
+                  summary: 缺少必要参数
+                  value:
+                    code: -400
+                    message: "请求错误"
+                    ttl: 1
+        '404':
+          description: 视频不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                video_not_found:
+                  summary: 视频不存在
+                  value:
+                    code: -404
+                    message: "视频不存在"
+                    ttl: 1
+        '403':
+          description: 视频访问受限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    VideoDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应码，0表示成功，其他值表示错误
+          example: 0
+        message:
+          type: string
+          description: 响应信息
+          example: "0"
+        ttl:
+          type: integer
+          description: 时间戳
+          example: 1
+        data:
+          $ref: '#/components/schemas/VideoDetailData'
+      required:
+        - code
+        - message
+        - ttl
+
+    VideoDetailData:
+      type: object
+      properties:
+        aid:
+          type: integer
+          description: 视频AV号
+          example: 170001
+        bvid:
+          type: string
+          description: 视频BV号
+          example: "BV1xx411c7mN"
+        title:
+          type: string
+          description: 视频标题
+          example: "示例视频标题"
+        desc:
+          type: string
+          description: 视频描述
+          example: "视频描述内容"
+        pic:
+          type: string
+          description: 视频封面图片URL
+          example: "https://i0.hdslb.com/bfs/archive/xxx.jpg"
+        tid:
+          type: integer
+          description: 分区ID
+          example: 28
+        tname:
+          type: string
+          description: 子分区名称
+          example: "原创音乐"
+        copyright:
+          type: integer
+          description: 版权标识（1-自制，2-转载）
+          enum: [1, 2]
+          example: 1
+        pubdate:
+          type: integer
+          description: 视频发布时间，Unix时间戳
+          example: 1627776000
+        ctime:
+          type: integer
+          description: 视频创建时间，Unix时间戳
+          example: 1627776000
+        duration:
+          type: integer
+          description: 视频时长，单位为秒
+          example: 240
+        videos:
+          type: integer
+          description: 视频分P总数
+          example: 1
+        state:
+          type: integer
+          description: 视频状态
+          example: 0
+        dynamic:
+          type: string
+          description: 视频动态信息
+          example: "动态信息"
+        cid:
+          type: integer
+          description: 视频CID
+          example: 987654321
+        owner:
+          $ref: '#/components/schemas/VideoOwner'
+        stat:
+          $ref: '#/components/schemas/VideoStats'
+        dimension:
+          $ref: '#/components/schemas/VideoDimension'
+        rights:
+          $ref: '#/components/schemas/VideoRights'
+        pages:
+          type: array
+          description: 视频分P信息列表
+          items:
+            $ref: '#/components/schemas/VideoPage'
+        subtitle:
+          $ref: '#/components/schemas/VideoSubtitle'
+        staff:
+          type: array
+          description: 视频参与人员列表
+          items:
+            $ref: '#/components/schemas/VideoStaff'
+        honor_reply:
+          type: object
+          description: 评论荣誉信息
+        like_icon:
+          type: string
+          description: 点赞图标
+        argue_info:
+          type: object
+          description: 争议信息
+      required:
+        - aid
+        - bvid
+        - title
+        - owner
+        - stat
+
+    VideoOwner:
+      type: object
+      properties:
+        mid:
+          type: integer
+          description: UP主UID
+          example: 123456
+        name:
+          type: string
+          description: UP主昵称
+          example: "UP主昵称"
+        face:
+          type: string
+          description: UP主头像URL
+          example: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+      required:
+        - mid
+        - name
+        - face
+
+    VideoStats:
+      type: object
+      properties:
+        aid:
+          type: integer
+          description: 视频AV号
+          example: 170001
+        view:
+          type: integer
+          description: 播放次数
+          example: 1000000
+        danmaku:
+          type: integer
+          description: 弹幕数量
+          example: 5000
+        reply:
+          type: integer
+          description: 评论数量
+          example: 2000
+        favorite:
+          type: integer
+          description: 收藏数量
+          example: 10000
+        coin:
+          type: integer
+          description: 投币数量
+          example: 8000
+        share:
+          type: integer
+          description: 分享次数
+          example: 3000
+        like:
+          type: integer
+          description: 点赞次数
+          example: 50000
+        now_rank:
+          type: integer
+          description: 当前排名
+          example: 0
+        his_rank:
+          type: integer
+          description: 历史最高排名
+          example: 50
+        no_reprint:
+          type: integer
+          description: 禁止转载标识
+          enum: [0, 1]
+          example: 1
+        evaluation:
+          type: string
+          description: 视频评价
+      required:
+        - aid
+        - view
+        - danmaku
+        - reply
+        - favorite
+        - coin
+        - share
+        - like
+
+    VideoDimension:
+      type: object
+      properties:
+        width:
+          type: integer
+          description: 视频宽度
+          example: 1920
+        height:
+          type: integer
+          description: 视频高度
+          example: 1080
+        rotate:
+          type: integer
+          description: 视频旋转角度
+          example: 0
+      required:
+        - width
+        - height
+        - rotate
+
+    VideoRights:
+      type: object
+      properties:
+        bp:
+          type: integer
+          description: 是否有付费观看，0：无，1：有
+          enum: [0, 1]
+          example: 0
+        elec:
+          type: integer
+          description: 是否支持充电，0：否，1：是
+          enum: [0, 1]
+          example: 1
+        download:
+          type: integer
+          description: 是否允许下载，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        movie:
+          type: integer
+          description: 是否电影，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        pay:
+          type: integer
+          description: 是否付费，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        hd5:
+          type: integer
+          description: 是否有高码率，0：否，1：是
+          enum: [0, 1]
+          example: 1
+        no_reprint:
+          type: integer
+          description: 是否禁止转载，0：否，1：是
+          enum: [0, 1]
+          example: 1
+        autoplay:
+          type: integer
+          description: 是否自动播放，0：否，1：是
+          enum: [0, 1]
+          example: 1
+        ugc_pay:
+          type: integer
+          description: 是否UGC付费，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        is_cooperation:
+          type: integer
+          description: 是否合作视频，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        ugc_pay_preview:
+          type: integer
+          description: 是否UGC付费预览，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        no_background:
+          type: integer
+          description: 是否无背景，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        clean_mode:
+          type: integer
+          description: 是否清洁模式，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        is_stein_gate:
+          type: integer
+          description: 是否为Stein Gate视频，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        is_360:
+          type: integer
+          description: 是否360度视频，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        no_share:
+          type: integer
+          description: 是否禁止分享，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        arc_pay:
+          type: integer
+          description: 是否Arc付费，0：否，1：是
+          enum: [0, 1]
+          example: 0
+        free_watch:
+          type: integer
+          description: 是否免费观看，0：否，1：是
+          enum: [0, 1]
+          example: 1
+
+    VideoPage:
+      type: object
+      properties:
+        cid:
+          type: integer
+          description: 分P的CID
+          example: 987654321
+        page:
+          type: integer
+          description: 分P的页码
+          example: 1
+        from:
+          type: string
+          description: 来源
+          example: "vupload"
+        part:
+          type: string
+          description: 分P标题
+          example: "P1"
+        duration:
+          type: integer
+          description: 分P时长，单位为秒
+          example: 240
+        vid:
+          type: string
+          description: 视频ID
+          example: "vn_xxx"
+        weblink:
+          type: string
+          description: 分P的网页链接
+          example: ""
+        dimension:
+          $ref: '#/components/schemas/VideoDimension'
+        first_frame:
+          type: string
+          description: 首帧图片URL
+      required:
+        - cid
+        - page
+        - part
+        - duration
+
+    VideoSubtitle:
+      type: object
+      properties:
+        allow_submit:
+          type: boolean
+          description: 是否允许提交字幕
+          example: true
+        list:
+          type: array
+          description: 字幕列表
+          items:
+            $ref: '#/components/schemas/SubtitleItem'
+
+    SubtitleItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 字幕ID
+          example: 123456
+        lan:
+          type: string
+          description: 字幕语言代码
+          example: "zh-CN"
+        lan_doc:
+          type: string
+          description: 字幕语言名称
+          example: "中文（简体）"
+        is_lock:
+          type: boolean
+          description: 是否锁定
+          example: false
+        subtitle_url:
+          type: string
+          description: 字幕文件URL
+          example: "https://i0.hdslb.com/bfs/subtitle/xxx.json"
+        type:
+          type: integer
+          description: 字幕类型
+          example: 0
+        id_str:
+          type: string
+          description: 字幕ID字符串
+        ai_type:
+          type: integer
+          description: AI字幕类型
+        ai_status:
+          type: integer
+          description: AI字幕状态
+        author:
+          $ref: '#/components/schemas/SubtitleAuthor'
+
+    SubtitleAuthor:
+      type: object
+      properties:
+        mid:
+          type: integer
+          description: 作者用户ID
+          example: 123456
+        name:
+          type: string
+          description: 作者用户名
+          example: "字幕君"
+        sex:
+          type: string
+          description: 作者性别
+          example: "保密"
+        face:
+          type: string
+          description: 作者头像URL
+          example: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+        sign:
+          type: string
+          description: 作者个性签名
+          example: "个性签名"
+        rank:
+          type: integer
+          description: 作者等级
+          example: 10000
+        birthday:
+          type: integer
+          description: 作者生日，Unix时间戳
+          example: 0
+        is_fake_account:
+          type: integer
+          description: 是否为假账号
+          enum: [0, 1]
+          example: 0
+        is_deleted:
+          type: integer
+          description: 是否已删除
+          enum: [0, 1]
+          example: 0
+        in_reg_audit:
+          type: integer
+          description: 是否在注册审核中
+          enum: [0, 1]
+          example: 0
+        is_senior_member:
+          type: integer
+          description: 是否为高级会员
+          enum: [0, 1]
+          example: 0
+
+    VideoStaff:
+      type: object
+      properties:
+        mid:
+          type: integer
+          description: 参与人员用户ID
+          example: 123456
+        title:
+          type: string
+          description: 职位/角色
+          example: "UP主"
+        name:
+          type: string
+          description: 用户昵称
+          example: "UP主昵称"
+        face:
+          type: string
+          description: 用户头像URL
+          example: "https://i0.hdslb.com/bfs/face/xxx.jpg"
+        vip:
+          $ref: '#/components/schemas/UserVip'
+        official:
+          $ref: '#/components/schemas/UserOfficial'
+        follower:
+          type: integer
+          description: 粉丝数
+          example: 10000
+        label_style:
+          type: integer
+          description: 标签样式
+          example: 0
+
+    UserVip:
+      type: object
+      properties:
+        type:
+          type: integer
+          description: VIP类型
+          example: 2
+        status:
+          type: integer
+          description: VIP状态
+          example: 1
+        due_date:
+          type: integer
+          description: VIP到期时间，Unix时间戳
+          example: 1735689600000
+        vip_pay_type:
+          type: integer
+          description: VIP支付类型
+          example: 0
+        theme_type:
+          type: integer
+          description: 主题类型
+          example: 0
+        avatar_subscript:
+          type: integer
+          description: 头像下标
+          example: 1
+        nickname_color:
+          type: string
+          description: 昵称颜色
+          example: "#FB7299"
+        label:
+          $ref: '#/components/schemas/VipLabel'
+
+    VipLabel:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 标签路径
+        text:
+          type: string
+          description: 标签文本
+          example: "年度大会员"
+        label_theme:
+          type: string
+          description: 标签主题
+          example: "annual_vip"
+        text_color:
+          type: string
+          description: 文本颜色
+          example: "#FFFFFF"
+        bg_style:
+          type: integer
+          description: 背景样式
+          example: 1
+        bg_color:
+          type: string
+          description: 背景颜色
+          example: "#FB7299"
+        border_color:
+          type: string
+          description: 边框颜色
+          example: "#FB7299"
+        use_img_label:
+          type: boolean
+          description: 是否使用图片标签
+          example: true
+        img_label_uri_hans:
+          type: string
+          description: 简体中文图片标签URI
+        img_label_uri_hant:
+          type: string
+          description: 繁体中文图片标签URI
+        img_label_uri_hans_static:
+          type: string
+          description: 简体中文静态图片标签URI
+        img_label_uri_hant_static:
+          type: string
+          description: 繁体中文静态图片标签URI
+
+    UserOfficial:
+      type: object
+      properties:
+        role:
+          type: integer
+          description: 官方角色
+          example: 0
+        title:
+          type: string
+          description: 官方标题
+          example: ""
+        desc:
+          type: string
+          description: 官方描述
+          example: ""
+        type:
+          type: integer
+          description: 官方类型
+          example: -1
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误代码
+          example: -400
+        message:
+          type: string
+          description: 错误信息
+          example: "请求错误"
+        ttl:
+          type: integer
+          description: TTL
+          example: 1
+      required:
+        - code
+        - message
+        - ttl
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API密钥认证
+
+tags:
+  - name: Video Detail
+    description: 单一视频稿件详情相关接口
+
+externalDocs:
+  description: 哔哩哔哩开放平台文档
+  url: https://open.bilibili.com/doc/4/d9554788-dcef-f139-6217-b487d41c3826
