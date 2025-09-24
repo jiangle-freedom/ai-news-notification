@@ -1,24 +1,38 @@
 import requests
 import json
 import logging
-from typing import Dict, Optional
-from config import WECHAT_WEBHOOK_URL, HEADERS
+from typing import Optional
+from config import WECHAT_WEBHOOK_URL
 
 logger = logging.getLogger(__name__)
 
 class WeChatNotifier:
-    """企业微信机器人通知器"""
+    """企业微信通知器"""
     
     def __init__(self, webhook_url: str = WECHAT_WEBHOOK_URL):
         self.webhook_url = webhook_url
         self.session = requests.Session()
-        self.session.headers.update(HEADERS)
     
-    def send_text_message(self, content: str, mentioned_list: Optional[list] = None) -> bool:
+    def validate_webhook_url(self) -> bool:
+        """验证webhook URL"""
+        if not self.webhook_url:
+            logger.error("WeChat webhook URL not configured")
+            return False
+        
+        if 'YOUR_BOT_KEY' in self.webhook_url:
+            logger.error("WeChat webhook URL contains placeholder")
+            return False
+        
+        if not self.webhook_url.startswith('https://qyapi.weixin.qq.com/'):
+            logger.error("Invalid WeChat webhook URL format")
+            return False
+        
+        return True
+    
+    def send_text_message(self, content: str) -> bool:
         """发送文本消息"""
         try:
-            if not self.webhook_url or 'YOUR_BOT_KEY' in self.webhook_url:
-                logger.warning("WeChat webhook URL not configured properly")
+            if not self.validate_webhook_url():
                 return False
             
             payload = {
@@ -28,11 +42,11 @@ class WeChatNotifier:
                 }
             }
             
-            # 添加@用户列表
-            if mentioned_list:
-                payload["text"]["mentioned_list"] = mentioned_list
-            
-            response = self.session.post(self.webhook_url, json=payload)
+            response = self.session.post(
+                self.webhook_url,
+                json=payload,
+                timeout=10
+            )
             response.raise_for_status()
             
             result = response.json()
@@ -40,18 +54,17 @@ class WeChatNotifier:
                 logger.info("Message sent successfully")
                 return True
             else:
-                logger.error(f"Failed to send message: {result.get('errmsg')}")
+                logger.error(f"Failed to send message: {result.get('errmsg', 'Unknown error')}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error sending WeChat message: {e}")
+            logger.error(f"Error sending text message: {e}")
             return False
     
     def send_markdown_message(self, content: str) -> bool:
-        """发送Markdown格式消息"""
+        """发送Markdown消息"""
         try:
-            if not self.webhook_url or 'YOUR_BOT_KEY' in self.webhook_url:
-                logger.warning("WeChat webhook URL not configured properly")
+            if not self.validate_webhook_url():
                 return False
             
             payload = {
@@ -61,7 +74,11 @@ class WeChatNotifier:
                 }
             }
             
-            response = self.session.post(self.webhook_url, json=payload)
+            response = self.session.post(
+                self.webhook_url,
+                json=payload,
+                timeout=10
+            )
             response.raise_for_status()
             
             result = response.json()
@@ -69,94 +86,113 @@ class WeChatNotifier:
                 logger.info("Markdown message sent successfully")
                 return True
             else:
-                logger.error(f"Failed to send markdown message: {result.get('errmsg')}")
+                logger.error(f"Failed to send markdown message: {result.get('errmsg', 'Unknown error')}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error sending WeChat markdown message: {e}")
+            logger.error(f"Error sending markdown message: {e}")
             return False
     
-    def send_ai_news_notification(self, video_summary: str, is_new: bool = True) -> bool:
+    def send_ai_news_notification(self, summary: str, is_new: bool = True) -> bool:
         """发送AI早报通知"""
         try:
-            # 构建通知内容
-            if is_new:
-                header = "🤖 **AI早报更新提醒** 🤖\n\n"
-                footer = "\n\n---\n💡 *及时了解AI前沿动态，把握技术发展趋势*"
-            else:
-                header = "📋 **AI早报内容回顾** 📋\n\n"
-                footer = "\n\n---\n💡 *定期回顾AI资讯，保持技术敏感度*"
+            prefix = "🆕 **AI早报更新**" if is_new else "📰 **AI早报**"
+            content = f"{prefix}\n\n{summary}"
             
-            full_content = header + video_summary + footer
+            # 尝试发送Markdown消息
+            success = self.send_markdown_message(content)
             
-            # 尝试发送Markdown格式，如果失败则发送纯文本
-            if not self.send_markdown_message(full_content):
-                # 转换为纯文本格式
-                text_content = self._markdown_to_text(full_content)
-                return self.send_text_message(text_content)
+            # 如果Markdown失败，尝试文本消息
+            if not success:
+                logger.info("Markdown failed, trying text message")
+                return self.send_text_message(content)
             
-            return True
+            return success
             
         except Exception as e:
             logger.error(f"Error sending AI news notification: {e}")
             return False
     
+    def send_test_message(self) -> bool:
+        """发送测试消息"""
+        test_content = """🧪 **AI早报监控系统测试**
+
+系统运行正常！
+
+📺 监控对象: 橘鸦Juya AI早报
+🤖 通知方式: 企业微信机器人
+⏰ 测试时间: 系统启动测试
+
+如果您收到此消息，说明通知配置正确！"""
+        
+        return self.send_markdown_message(test_content)
+    
     def send_error_notification(self, error_message: str) -> bool:
         """发送错误通知"""
         try:
-            content = f"⚠️ **AI早报监控系统错误**\n\n错误信息：{error_message}\n\n请检查系统状态。"
-            return self.send_text_message(content)
+            content = f"""❌ **AI早报监控系统错误**
+
+系统运行时出现错误，请检查：
+
+**错误信息:**
+{error_message}
+
+**建议操作:**
+1. 检查网络连接
+2. 查看系统日志
+3. 重启监控服务
+
+⏰ 错误时间: {self._get_current_time()}"""
+            
+            return self.send_markdown_message(content)
             
         except Exception as e:
             logger.error(f"Error sending error notification: {e}")
             return False
     
-    def send_test_message(self) -> bool:
-        """发送测试消息"""
+    def send_startup_notification(self, check_interval: int) -> bool:
+        """发送启动通知"""
         try:
-            content = "🧪 **系统测试消息**\n\nAI早报通知系统运行正常！"
-            return self.send_text_message(content)
+            content = f"""🚀 **AI早报监控系统启动**
+
+系统已成功启动，开始监控AI早报更新！
+
+⚙️ **配置信息:**
+- 监控对象: 橘鸦Juya AI早报
+- 检查间隔: {check_interval} 分钟
+- 启动时间: {self._get_current_time()}
+
+📱 **通知规则:**
+- 只推送当天发布的新视频
+- 每个视频仅推送一次
+- 自动清理链接，保留纯文字内容
+
+系统将持续监控，有新的AI早报时会第一时间通知！"""
+            
+            return self.send_markdown_message(content)
             
         except Exception as e:
-            logger.error(f"Error sending test message: {e}")
+            logger.error(f"Error sending startup notification: {e}")
             return False
     
-    def _markdown_to_text(self, markdown_content: str) -> str:
-        """将Markdown内容转换为纯文本"""
+    def send_shutdown_notification(self) -> bool:
+        """发送关闭通知"""
         try:
-            # 移除Markdown格式标记
-            text = markdown_content
-            text = text.replace('**', '')  # 移除粗体标记
-            text = text.replace('*', '')   # 移除斜体标记
-            text = text.replace('#', '')   # 移除标题标记
-            text = text.replace('`', '')   # 移除代码标记
-            text = text.replace('---', '————————————')  # 转换分隔线
+            content = f"""🛑 **AI早报监控系统停止**
+
+系统已停止运行。
+
+⏰ 停止时间: {self._get_current_time()}
+
+如需重新启动，请执行启动命令。"""
             
-            return text
+            return self.send_markdown_message(content)
             
         except Exception as e:
-            logger.error(f"Error converting markdown to text: {e}")
-            return markdown_content
-    
-    def validate_webhook_url(self) -> bool:
-        """验证webhook地址是否有效"""
-        try:
-            if not self.webhook_url or 'YOUR_BOT_KEY' in self.webhook_url:
-                return False
-            
-            # 发送一个测试消息来验证
-            test_payload = {
-                "msgtype": "text",
-                "text": {
-                    "content": "连接测试"
-                }
-            }
-            
-            response = self.session.post(self.webhook_url, json=test_payload)
-            result = response.json()
-            
-            return result.get('errcode') == 0
-            
-        except Exception as e:
-            logger.error(f"Error validating webhook URL: {e}")
+            logger.error(f"Error sending shutdown notification: {e}")
             return False
+    
+    def _get_current_time(self) -> str:
+        """获取当前时间字符串"""
+        from datetime import datetime
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
