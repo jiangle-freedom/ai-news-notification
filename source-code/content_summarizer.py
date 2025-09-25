@@ -49,75 +49,45 @@ class ContentSummarizer:
             description = video.get('description', '')
             video_url = video.get('video_url', '')
             
+            # 构建摘要
+            summary_parts = []
+            
+            # 标题
+            summary_parts.append(f"📺 **{title}**")
+            
+            # 获取描述内容
+            desc = description
+            tags = []
+            
             # 如果有详细信息，使用更丰富的描述
             if video_detail:
                 video_info = self.extract_video_info(video_detail)
                 desc = video_info.get('description', description)
                 tags = video_info.get('tags', [])
-                
-                # 构建更详细的摘要
-                summary_parts = []
-                
-                # 标题
-                summary_parts.append(f"📺 **{title}**")
-                
-                # 描述 (清理后的内容，保持换行格式)
-                if desc and desc.strip():
-                    clean_desc = self._clean_description(desc)
-                    if clean_desc:
-                        # 限制内容长度，但保持完整性
-                        if len(clean_desc) > 300:
-                            # 找到最近的句号或换行符来截断
-                            truncate_pos = clean_desc.find('\n', 250)
-                            if truncate_pos == -1:
-                                truncate_pos = clean_desc.find('。', 250)
-                            if truncate_pos != -1:
-                                clean_desc = clean_desc[:truncate_pos + 1] + "..."
-                            else:
-                                clean_desc = clean_desc[:300] + "..."
-                        summary_parts.append(f"\n\n📋 **内容概要：**\n{clean_desc}")
-                
-                # 标签
-                if tags:
-                    relevant_tags = [tag for tag in tags[:5] if tag]  # 取前5个标签
-                    if relevant_tags:
-                        summary_parts.append(f"\n\n🏷️ **相关标签：** {' | '.join(relevant_tags)}")
-                
-                # 观看链接 - 这是唯一保留的链接
-                summary_parts.append(f"\n\n🔗 **观看链接：** {video_url}")
-                
-                return "".join(summary_parts)
             
-            else:
-                # 简单摘要
-                summary_parts = []
-                summary_parts.append(f"📺 **{title}**")
-                
-                if description and description.strip():
-                    clean_desc = self._clean_description(description)
-                    if clean_desc:
-                        if len(clean_desc) > 200:
-                            # 找到最近的句号或换行符来截断
-                            truncate_pos = clean_desc.find('\n', 150)
-                            if truncate_pos == -1:
-                                truncate_pos = clean_desc.find('。', 150)
-                            if truncate_pos != -1:
-                                clean_desc = clean_desc[:truncate_pos + 1] + "..."
-                            else:
-                                clean_desc = clean_desc[:200] + "..."
-                        summary_parts.append(f"\n\n📋 **内容概要：**\n{clean_desc}")
-                
-                # 观看链接 - 这是唯一保留的链接
-                summary_parts.append(f"\n\n🔗 **观看链接：** {video_url}")
-                
-                return "".join(summary_parts)
+            # 描述 (清理后的内容，转换为bullet points格式)
+            if desc and desc.strip():
+                clean_desc = self._clean_description(desc)
+                if clean_desc:
+                    summary_parts.append(f"\n\n📋 **内容概要：**\n{clean_desc}")
+            
+            # 标签（仅在有详细信息时显示）
+            if tags:
+                relevant_tags = [tag for tag in tags[:5] if tag]  # 取前5个标签
+                if relevant_tags:
+                    summary_parts.append(f"\n\n🏷️ **相关标签：** {' | '.join(relevant_tags)}")
+            
+            # 观看链接 - 这是唯一保留的链接
+            summary_parts.append(f"\n\n🔗 **观看链接：** {video_url}")
+            
+            return "".join(summary_parts)
                 
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
             return f"📺 {video.get('title', '未知标题')}\n🔗 {video.get('video_url', '')}"
     
     def _clean_description(self, description: str) -> str:
-        """清理描述文本"""
+        """清理描述文本并按时间信息分割为bullet points"""
         try:
             import re
             
@@ -187,23 +157,98 @@ class ContentSummarizer:
             for phrase in unwanted_phrases:
                 clean_text = clean_text.replace(phrase, '')
             
-            # 分段处理，保持换行
-            lines = clean_text.split('\n')
-            cleaned_lines = []
+            # 按时间信息分割内容：寻找 ": {时间信息}" 模式
+            # 改进的时间模式匹配逻辑
+            time_pattern = r'([^:\n]+):\s*(\d{1,2}:\d{2}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}日|\d{1,2}/\d{1,2}|\d{1,2}-\d{1,2}|今天|昨天|明天|本周|上周|下周)'
             
-            for line in lines:
-                line = line.strip()
-                # 过滤掉只包含特殊字符、数字或很短的行
-                if line and len(line) > 3 and not re.match(r'^[^\w\u4e00-\u9fff]*$', line):
-                    cleaned_lines.append(line)
+            # 寻找所有匹配的时间模式
+            time_matches = list(re.finditer(time_pattern, clean_text))
+            bullet_points = []
             
-            # 用换行符连接不同内容
-            result = '\n'.join(cleaned_lines)
+            if time_matches:
+                # 按照匹配的位置分割文本
+                last_end = 0
+                
+                for match in time_matches:
+                    # 获取匹配前的内容作为前置描述
+                    prefix_content = clean_text[last_end:match.start()].strip()
+                    
+                    # 获取匹配的标题和时间
+                    title_part = match.group(1).strip()
+                    time_part = match.group(2).strip()
+                    
+                    # 获取匹配后的内容（到下一个匹配或文本结尾）
+                    next_match_start = time_matches[time_matches.index(match) + 1].start() if time_matches.index(match) + 1 < len(time_matches) else len(clean_text)
+                    content_part = clean_text[match.end():next_match_start].strip()
+                    
+                    # 构建条目
+                    if title_part and content_part:
+                        # 清理内容，移除多余的换行和空格
+                        content_part = re.sub(r'\s+', ' ', content_part)
+                        entry = f"{title_part} ({time_part}): {content_part}"
+                    elif title_part:
+                        entry = f"{title_part} ({time_part})"
+                    else:
+                        continue
+                    
+                    if len(entry.strip()) > 10:  # 过滤太短的条目
+                        bullet_points.append(entry.strip())
+                    
+                    last_end = next_match_start
             
-            # 移除多余的连续换行符
-            result = re.sub(r'\n{3,}', '\n\n', result)
+            # 如果没有找到时间模式，尝试其他分割方式
+            if not bullet_points:
+                # 按段落分割
+                paragraphs = clean_text.split('\n')
+                for para in paragraphs:
+                    para = para.strip()
+                    if para and len(para) > 10:  # 过滤太短的段落
+                        # 清理段落内容
+                        if not re.match(r'^[^\w\u4e00-\u9fff]*$', para):
+                            bullet_points.append(para)
             
-            return result.strip()
+            # 如果仍然没有条目，使用原始清理逻辑
+            if not bullet_points:
+                lines = clean_text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if line and len(line) > 3 and not re.match(r'^[^\w\u4e00-\u9fff]*$', line):
+                        bullet_points.append(line)
+            
+            # 格式化为bullet points
+            if bullet_points:
+                # 限制条目数量，避免过长
+                max_entries = 8
+                if len(bullet_points) > max_entries:
+                    bullet_points = bullet_points[:max_entries]
+                
+                # 添加bullet point符号
+                formatted_points = []
+                for point in bullet_points:
+                    # 确保每个条目不会太长
+                    if len(point) > 200:
+                        point = point[:197] + "..."
+                    formatted_points.append(f"• {point}")
+                
+                return '\n'.join(formatted_points)
+            else:
+                # 如果没有找到有效条目，返回原始清理后的文本
+                lines = clean_text.split('\n')
+                cleaned_lines = []
+                
+                for line in lines:
+                    line = line.strip()
+                    # 过滤掉只包含特殊字符、数字或很短的行
+                    if line and len(line) > 3 and not re.match(r'^[^\w\u4e00-\u9fff]*$', line):
+                        cleaned_lines.append(line)
+                
+                # 用换行符连接不同内容
+                result = '\n'.join(cleaned_lines)
+                
+                # 移除多余的连续换行符
+                result = re.sub(r'\n{3,}', '\n\n', result)
+                
+                return result.strip()
             
         except Exception as e:
             logger.error(f"Error cleaning description: {e}")
