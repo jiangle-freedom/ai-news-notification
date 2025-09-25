@@ -47,7 +47,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+可以使用交互式脚本快速创建配置：
+
+```bash
+# 交互式创建 .env 文件
+./create_env.sh
+```
+
+或者手动编辑 `.env` 文件：
 
 ```env
 # 企业微信机器人 Webhook URL
@@ -57,7 +64,9 @@ WECHAT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_ACT
 BILIBILI_UP_UID=285286947
 
 # 检查间隔（分钟）
-CHECK_INTERVAL=30
+CHECK_INTERVAL=360
+ENABLE_DAILY_PUSH=true
+DAILY_PUSH_TIME=09:30
 
 # 日志级别
 LOG_LEVEL=INFO
@@ -96,6 +105,7 @@ python main.py --mode force
 | `test` | 发送测试消息 | 验证配置 |
 | `check` | 执行一次检查 | 手动触发 |
 | `status` | 查看系统状态 | 监控调试 |
+| `test-daily` | 测试每日定时推送功能 | 验证定时推送 |
 | `force` | 强制检查最新视频 | 初始化或调试 |
 
 ## 配置说明
@@ -106,7 +116,9 @@ python main.py --mode force
 |--------|------|--------|------|
 | `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook | 无 | ✅ |
 | `BILIBILI_UP_UID` | Bilibili UP主 UID | 285286947 | ❌ |
-| `CHECK_INTERVAL` | 检查间隔（分钟） | 30 | ❌ |
+| `CHECK_INTERVAL` | 实时检查间隔（分钟） | 360 | ❌ |
+| `ENABLE_DAILY_PUSH` | 是否启用每日定时推送 | true | ❌ |
+| `DAILY_PUSH_TIME` | 每日推送时间（中国时区） | 09:30 | ❌ |
 | `LOG_LEVEL` | 日志级别 | INFO | ❌ |
 
 ### 数据存储
@@ -114,6 +126,7 @@ python main.py --mode force
 系统使用简单的文件存储：
 
 - `data/processed_videos.txt`: 已处理的视频ID列表
+- `data/daily_push_log.txt`: 每日定时推送记录
 - `logs/`: 日志文件目录
 
 ## 项目结构

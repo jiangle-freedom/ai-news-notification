@@ -10,6 +10,9 @@ services:
       - BILIBILI_UP_UID=${BILIBILI_UP_UID:-285286947}
       - CHECK_INTERVAL=${CHECK_INTERVAL:-360}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Daily Push Configuration
+      - ENABLE_DAILY_PUSH=${ENABLE_DAILY_PUSH:-true}
+      - DAILY_PUSH_TIME=${DAILY_PUSH_TIME:-09:30}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

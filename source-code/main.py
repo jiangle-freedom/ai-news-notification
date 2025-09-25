@@ -58,7 +58,7 @@ def validate_environment(skip_wechat=False):
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='AI News Notification System')
-    parser.add_argument('--mode', choices=['run', 'test', 'check', 'status', 'force', 'init'], 
+    parser.add_argument('--mode', choices=['run', 'test', 'check', 'status', 'force', 'init', 'test-daily'], 
                        default='run', help='运行模式')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], 
                        default='INFO', help='日志级别')
@@ -117,6 +117,11 @@ def main():
             # 初始化模式 - 只处理最新视频
             logger.info("Running initialization mode...")
             scheduler.run_first_time_setup()
+            
+        elif args.mode == 'test-daily':
+            # 测试定时推送功能
+            logger.info("Testing daily push functionality...")
+            scheduler.daily_push_check()
         
         logger.info("Program completed successfully")
         

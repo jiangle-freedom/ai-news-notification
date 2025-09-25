@@ -14,9 +14,15 @@ BILIBILI_API_BASE = 'https://api.bilibili.com'
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 360))  # minutes
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
+# Scheduling Configuration
+DAILY_PUSH_TIME = os.getenv('DAILY_PUSH_TIME', '09:30')  # Daily push time in China timezone
+CHINA_TIMEZONE = 'Asia/Shanghai'  # China timezone UTC+8
+ENABLE_DAILY_PUSH = os.getenv('ENABLE_DAILY_PUSH', 'true').lower() == 'true'
+
 # Data Storage
 DATA_DIR = 'data'
 PROCESSED_VIDEOS_FILE = os.path.join(DATA_DIR, 'processed_videos.txt')
+DAILY_PUSH_LOG_FILE = os.path.join(DATA_DIR, 'daily_push_log.txt')  # Record daily push history
 
 # Headers for requests
 HEADERS = {

@@ -1,13 +1,15 @@
 import schedule
 import time
 import logging
-from datetime import datetime
+import pytz
+import os
+from datetime import datetime, date
 from typing import Optional
 from bilibili_monitor import BilibiliMonitor
 from content_summarizer import ContentSummarizer
 from wechat_notifier import WeChatNotifier
 from data_manager import DataManager
-from config import CHECK_INTERVAL
+from config import CHECK_INTERVAL, DAILY_PUSH_TIME, CHINA_TIMEZONE, ENABLE_DAILY_PUSH, DAILY_PUSH_LOG_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +22,136 @@ class AINewsScheduler:
         self.wechat_notifier = WeChatNotifier()
         self.data_manager = DataManager()
         self.is_running = False
+        self.china_tz = pytz.timezone(CHINA_TIMEZONE)
+    
+    def daily_push_check(self):
+        """每日定时推送检查 (9:30 AM China time)"""
+        try:
+            # 获取当前中国时间
+            china_now = datetime.now(self.china_tz)
+            today_str = china_now.strftime('%Y-%m-%d')
+            
+            logger.info(f"Starting daily push check for {today_str}")
+            
+            # 检查今天是否已经执行过定时推送
+            if self._is_daily_push_done_today():
+                logger.info(f"Daily push already completed for {today_str}")
+                return
+            
+            # 获取AI早报视频
+            ai_videos = self.bilibili_monitor.get_ai_news_videos()
+            
+            if not ai_videos:
+                logger.info("No AI news videos found for daily push")
+                self._mark_daily_push_done()
+                return
+            
+            # 筛选今天的视频（从昨晚到今天9:30之前发布的）
+            today_videos = self._get_videos_for_daily_push(ai_videos)
+            
+            if not today_videos:
+                logger.info("No new videos found for today's daily push")
+                self._mark_daily_push_done()
+                return
+            
+            logger.info(f"Found {len(today_videos)} videos for daily push")
+            
+            # 处理每个视频并标记为已推送
+            push_count = 0
+            for video in today_videos:
+                try:
+                    # 检查是否已经被处理过
+                    if not self.data_manager.is_video_processed(video.get('bvid')):
+                        self._process_single_video(video)
+                        push_count += 1
+                        time.sleep(2)  # 避免发送过快
+                except Exception as e:
+                    logger.error(f"Error processing video in daily push {video.get('bvid')}: {e}")
+                    continue
+            
+            # 标记今日定时推送已完成
+            self._mark_daily_push_done()
+            
+            # 发送定时推送完成通知
+            if push_count > 0:
+                self.wechat_notifier.send_text_message(
+                    f"📅 每日AI早报推送完成\n"
+                    f"📊 推送数量: {push_count}个视频\n"
+                    f"⏰ 推送时间: {china_now.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                logger.info(f"Daily push completed: {push_count} videos sent")
+            else:
+                logger.info("Daily push completed: no new videos to send")
+                
+        except Exception as e:
+            logger.error(f"Error in daily_push_check: {e}")
+    
+    def _get_videos_for_daily_push(self, ai_videos):
+        """获取用于定时推送的视频（昨晚到今天9:30之前发布的）"""
+        try:
+            china_now = datetime.now(self.china_tz)
+            today = china_now.date()
+            
+            # 计算时间范围：昨天18:00到今天9:30
+            yesterday = date.fromordinal(today.toordinal() - 1)
+            start_time = self.china_tz.localize(datetime.combine(yesterday, datetime.strptime("18:00", "%H:%M").time()))
+            end_time = self.china_tz.localize(datetime.combine(today, datetime.strptime(DAILY_PUSH_TIME, "%H:%M").time()))
+            
+            daily_videos = []
+            for video in ai_videos:
+                video_time = video.get('created') or video.get('pubdate')
+                if video_time:
+                    # 转换为datetime对象
+                    if isinstance(video_time, int):
+                        video_dt = datetime.fromtimestamp(video_time, tz=self.china_tz)
+                    else:
+                        continue
+                    
+                    # 检查是否在时间范围内
+                    if start_time <= video_dt <= end_time:
+                        daily_videos.append(video)
+                        logger.debug(f"Video for daily push: {video.get('title')} at {video_dt}")
+            
+            return daily_videos
+            
+        except Exception as e:
+            logger.error(f"Error getting videos for daily push: {e}")
+            return []
+    
+    def _is_daily_push_done_today(self) -> bool:
+        """检查今天是否已经执行过定时推送"""
+        try:
+            if not os.path.exists(DAILY_PUSH_LOG_FILE):
+                return False
+            
+            today_str = datetime.now(self.china_tz).strftime('%Y-%m-%d')
+            
+            with open(DAILY_PUSH_LOG_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                last_line = lines[-1].strip() if lines else ''
+                return today_str in last_line
+                
+        except Exception as e:
+            logger.warning(f"Error checking daily push status: {e}")
+            return False
+    
+    def _mark_daily_push_done(self):
+        """标记今日定时推送已完成"""
+        try:
+            os.makedirs(os.path.dirname(DAILY_PUSH_LOG_FILE), exist_ok=True)
+            china_now = datetime.now(self.china_tz)
+            log_entry = f"{china_now.strftime('%Y-%m-%d %H:%M:%S')} - Daily push completed\n"
+            
+            with open(DAILY_PUSH_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(log_entry)
+                
+            logger.debug(f"Marked daily push as completed: {log_entry.strip()}")
+            
+        except Exception as e:
+            logger.error(f"Error marking daily push as done: {e}")
     
     def check_for_new_videos(self):
-        """检查新视频并发送通知（基于时间的新视频检测）"""
+        """实时检查新视频并发送通知（避免与定时推送重复）"""
         try:
             logger.info("Checking for new AI news videos...")
             
@@ -103,14 +232,22 @@ class AINewsScheduler:
                 return
             
             # 设置定时任务
+            # 1. 实时检查：每隔6小时检查新视频
             schedule.every(CHECK_INTERVAL).minutes.do(self.check_for_new_videos)
             
+            # 2. 定时推送：每日上匈9:30（中国时区）
+            if ENABLE_DAILY_PUSH:
+                schedule.every().day.at(DAILY_PUSH_TIME).do(self.daily_push_check)
+                logger.info(f"Daily push scheduled at {DAILY_PUSH_TIME} China time")
+            
             # 发送启动通知
+            daily_push_status = f"\n📅 每日定时推送: {DAILY_PUSH_TIME} (中国时区)" if ENABLE_DAILY_PUSH else ""
             self.wechat_notifier.send_text_message(
                 f"🚀 AI早报监控系统已启动\n"
-                f"⏰ 检查间隔: {CHECK_INTERVAL}分钟\n"
+                f"⏰ 实时检查间隔: {CHECK_INTERVAL}分钟\n"
+                f"{daily_push_status}"
                 f"📺 监控UP主: 橘鸦Juya\n"
-                f"🕐 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"🕐 启动时间: {datetime.now(self.china_tz).strftime('%Y-%m-%d %H:%M:%S')}"
             )
             
             self.is_running = True

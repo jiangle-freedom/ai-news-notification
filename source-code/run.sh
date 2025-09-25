@@ -112,6 +112,7 @@ show_help() {
     echo "  stop    停止运行中的服务"
     echo "  force   强制检查最新视频"
     echo "  init    初始化模式 - 检查并处理当天发布的视频"
+    echo "  test-daily  测试定时推送功能"
     echo ""
     echo "选项:"
     echo "  -h, --help     显示此帮助信息"
@@ -220,7 +221,7 @@ main() {
                 config_only=true
                 shift
                 ;;
-            run|test|check|status|stop|force|init)
+            run|test|check|status|stop|force|init|test-daily)
                 mode=$1
                 shift
                 ;;
