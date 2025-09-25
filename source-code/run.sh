@@ -29,16 +29,46 @@ check_python() {
     print_message $GREEN "✓ Python 版本: $python_version"
 }
 
-# 检查依赖
+# 检查和设置虚拟环境
+setup_venv() {
+    if [ ! -d "venv" ]; then
+        print_message $BLUE "创建虚拟环境..."
+        python3 -m venv venv
+        print_message $GREEN "✓ 虚拟环境创建完成"
+    fi
+    
+    # 激活虚拟环境
+    source venv/bin/activate
+    print_message $GREEN "✓ 虚拟环境已激活"
+}
+
+# 检查依赖（智能检查，避免重复安装）
 check_dependencies() {
     if [ ! -f "requirements.txt" ]; then
         print_message $RED "错误: 未找到 requirements.txt 文件"
         exit 1
     fi
     
-    print_message $BLUE "检查 Python 依赖..."
-    pip3 install -r requirements.txt > /dev/null 2>&1
-    print_message $GREEN "✓ 依赖安装完成"
+    # 检查依赖是否已安装
+    local needs_install=false
+    
+    # 检查主要依赖是否存在
+    if ! python -c "import requests, schedule, dotenv, bs4" &> /dev/null; then
+        needs_install=true
+    fi
+    
+    if [ "$needs_install" = true ]; then
+        print_message $BLUE "安装 Python 依赖..."
+        pip install -r requirements.txt > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            print_message $GREEN "✓ 依赖安装完成"
+        else
+            print_message $RED "✗ 依赖安装失败"
+            exit 1
+        fi
+    else
+        print_message $GREEN "✓ 依赖已安装"
+    fi
 }
 
 # 检查配置文件
@@ -79,6 +109,7 @@ show_help() {
     echo "  test    发送测试消息"
     echo "  check   执行一次检查"
     echo "  status  查看系统状态"
+    echo "  stop    停止运行中的服务"
     echo "  force   强制检查最新视频"
     echo "  init    初始化模式 - 检查并处理当天发布的视频"
     echo ""
@@ -93,6 +124,74 @@ show_help() {
     echo "  $0 test         # 发送测试消息"
     echo "  $0 run -v       # 详细模式运行"
     echo "  $0 --install    # 仅安装依赖"
+}
+
+# 检查进程状态
+check_process_status() {
+    local pid_count=$(ps aux | grep -E "(main\.py|python.*main)" | grep -v grep | wc -l)
+    local process_info=$(ps aux | grep -E "(main\.py|python.*main)" | grep -v grep)
+    
+    if [ "$pid_count" -gt 0 ]; then
+        print_message $GREEN "✓ 系统正在运行"
+        echo "$process_info" | while read line; do
+            local pid=$(echo $line | awk '{print $2}')
+            local start_time=$(echo $line | awk '{print $9}')
+            local mode=$(echo $line | grep -o '\-\-mode [a-z]*' | awk '{print $2}')
+            print_message $BLUE "  进程ID: $pid | 启动时间: $start_time | 模式: ${mode:-run}"
+        done
+        
+        # 检查日志文件
+        local log_file="logs/ai_news_$(date +%Y%m%d).log"
+        if [ -f "$log_file" ]; then
+            local last_log=$(tail -1 "$log_file" 2>/dev/null)
+            if [ ! -z "$last_log" ]; then
+                print_message $BLUE "  最新日志: $last_log"
+            fi
+        fi
+        
+        return 0
+    else
+        print_message $YELLOW "⚠ 系统未运行"
+        return 1
+    fi
+}
+
+# 停止服务
+stop_service() {
+    print_message $BLUE "正在停止 AI News Notification System..."
+    
+    local pid_count=$(ps aux | grep -E "(main\.py|python.*main)" | grep -v grep | wc -l)
+    
+    if [ "$pid_count" -eq 0 ]; then
+        print_message $YELLOW "没有找到运行中的服务"
+        return 1
+    fi
+    
+    # 获取所有相关进程的PID
+    local pids=$(ps aux | grep -E "(main\.py|python.*main)" | grep -v grep | awk '{print $2}')
+    
+    for pid in $pids; do
+        print_message $BLUE "正在停止进程 $pid..."
+        kill "$pid" 2>/dev/null
+        
+        # 等待进程停止
+        local count=0
+        while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+            sleep 1
+            count=$((count + 1))
+        done
+        
+        # 如果进程仍然存在，强制终止
+        if kill -0 "$pid" 2>/dev/null; then
+            print_message $YELLOW "强制终止进程 $pid..."
+            kill -9 "$pid" 2>/dev/null
+        fi
+        
+        print_message $GREEN "✓ 进程 $pid 已停止"
+    done
+    
+    print_message $GREEN "服务已成功停止"
+    return 0
 }
 
 # 主函数
@@ -121,7 +220,7 @@ main() {
                 config_only=true
                 shift
                 ;;
-            run|test|check|status|force|init)
+            run|test|check|status|stop|force|init)
                 mode=$1
                 shift
                 ;;
@@ -140,6 +239,7 @@ main() {
     
     # 检查环境
     check_python
+    setup_venv
     check_dependencies
     
     if [ "$install_only" = true ]; then
@@ -156,12 +256,44 @@ main() {
     
     create_directories
     
+    # 特殊处理 status 模式
+    if [ "$mode" = "status" ]; then
+        print_message $BLUE "检查系统运行状态..."
+        echo ""
+        
+        # 检查进程状态
+        check_process_status
+        process_running=$?
+        
+        echo ""
+        print_message $BLUE "获取详细系统状态..."
+        
+        # 调用Python程序获取详细状态
+        python main.py --mode "$mode" --log-level "$log_level"
+        
+        echo ""
+        if [ $process_running -eq 0 ]; then
+            print_message $GREEN "系统运行正常"
+        else
+            print_message $YELLOW "系统未在后台运行"
+            print_message $BLUE "要启动系统，请运行: $0 run"
+        fi
+        
+        exit 0
+    fi
+    
+    # 特殊处理 stop 模式
+    if [ "$mode" = "stop" ]; then
+        stop_service
+        exit $?
+    fi
+    
     # 启动应用
     print_message $GREEN "启动 AI News Notification System..."
     print_message $BLUE "按 Ctrl+C 停止程序"
     echo ""
     
-    python3 main.py --mode "$mode" --log-level "$log_level"
+    python main.py --mode "$mode" --log-level "$log_level"
 }
 
 # 运行主函数
