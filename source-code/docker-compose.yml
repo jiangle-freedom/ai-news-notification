@@ -6,6 +6,7 @@ services:
     container_name: ai-news-notification
     restart: unless-stopped
     environment:
+      - TZ=Asia/Shanghai
       - WECHAT_WEBHOOK_URL=${WECHAT_WEBHOOK_URL}
       - BILIBILI_UP_UID=${BILIBILI_UP_UID:-285286947}
       - CHECK_INTERVAL=${CHECK_INTERVAL:-360}
